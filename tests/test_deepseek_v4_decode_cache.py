@@ -108,16 +108,6 @@ def _last_logits(out):
 #   4  -> pre-grow (offset < keys.shape[2] && shape < max_size)
 #   8  -> trim/boundary (offset == max_size, _idx == max_size triggers wrap)
 #   12 -> post-wrap (offset > max_size, ring buffer in steady state)
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Decode-cache divergence per @anerjy on ml-explore/mlx-lm#1189. "
-        "Bug localized to V4Attention core path (8 toggles ruled out caches/"
-        "rope-kernel/compressors/sinks/mHC). Remove this xfail decorator once "
-        "the underlying bug is patched - the tests will become a hard "
-        "regression guard."
-    ),
-)
 @pytest.mark.parametrize("prompt_len", [4, 8, 12])
 def test_deepseek_v4_decode_cache_logit_parity(prompt_len):
     """Path A (no-cache, ground truth) vs Path B (with-cache) must produce
@@ -187,16 +177,6 @@ def test_deepseek_v4_decode_cache_logit_parity(prompt_len):
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Decode-cache divergence per @anerjy on ml-explore/mlx-lm#1189. "
-        "Bug localized to V4Attention core path (8 toggles ruled out caches/"
-        "rope-kernel/compressors/sinks/mHC). Remove this xfail decorator once "
-        "the underlying bug is patched - the tests will become a hard "
-        "regression guard."
-    ),
-)
 @pytest.mark.parametrize("prompt_len", [4, 8, 12])
 def test_deepseek_v4_decode_cache_argmax_parity(prompt_len):
     """Strict downstream assertion: even if logits diverge by epsilon, the
