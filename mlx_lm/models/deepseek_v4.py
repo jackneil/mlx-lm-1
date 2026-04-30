@@ -480,6 +480,14 @@ class CompressedKVCache(KVCache):
         self.local.keys = value
 
     @property
+    def values(self):
+        return self.local.values
+
+    @values.setter
+    def values(self, value):
+        self.local.values = value
+
+    @property
     def pool(self):
         return self._pool
 
