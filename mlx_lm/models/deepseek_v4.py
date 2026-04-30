@@ -920,6 +920,15 @@ class V4Attention(nn.Module):
         kv = kv.reshape(B, 1, S, self.head_dim)
 
         offset = cache.offset if cache is not None else 0
+        # Some cache implementations (e.g. vllm-mlx's BatchedEngine
+        # CompressedKVCache) return cache.offset as a 0-D mx.array
+        # rather than a Python int. mx.arange(...) at line ~977 below
+        # rejects mx.array positional args (see RoPE __call__ at line 241
+        # which already does the same coercion). Without this we hit
+        # `TypeError: arange(): incompatible function arguments` on every
+        # decode step the moment cache is non-None.
+        if isinstance(offset, mx.array):
+            offset = offset.item()
 
         # Apply RoPE only to the last rope_head_dim dims
         q_nope, q_pe = mx.split(q,  [self.nope_head_dim], axis=-1)
