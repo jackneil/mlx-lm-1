@@ -1885,15 +1885,29 @@ def main():
         help="Use pipelining instead of tensor parallelism",
     )
     args = parser.parse_args()
+    # Wired-limit handling: coordinated across sibling processes via env
+    # divisor (MLX_LM_NUM_SERVERS). Restore prior limit on graceful shutdown
+    # so the kernel reclaims wired-page reservations promptly. See
+    # mlx-lm/issues/883 for context on why the default is too aggressive
+    # for multi-server hosts.
+    old_wired_limit = None
     if mx.metal.is_available():
-        wired_limit = mx.device_info()["max_recommended_working_set_size"]
-        mx.set_wired_limit(wired_limit)
+        from mlx_lm.generate import _target_wired_limit
+        old_wired_limit = mx.set_wired_limit(_target_wired_limit())
 
     logging.basicConfig(
         level=getattr(logging, args.log_level.upper(), None),
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
-    run(args.host, args.port, ModelProvider(args))
+    try:
+        run(args.host, args.port, ModelProvider(args))
+    finally:
+        if old_wired_limit is not None:
+            try:
+                mx.synchronize()
+                mx.set_wired_limit(old_wired_limit)
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
