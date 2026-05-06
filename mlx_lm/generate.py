@@ -5,6 +5,7 @@ import contextlib
 import copy
 import functools
 import json
+import os
 import sys
 import time
 from collections import deque
@@ -226,6 +227,21 @@ def setup_arg_parser():
 generation_stream = mx.new_thread_local_stream(mx.default_device())
 
 
+def _target_wired_limit() -> int:
+    """Wired-limit target coordinated across sibling servers.
+
+    `MLX_LM_NUM_SERVERS` (default 1) divides
+    `max_recommended_working_set_size` so N processes co-located on one
+    Mac don't each request 75% of physical RAM independently — the
+    proximate cause of the kernel-level cascade in mlx-lm/issues/883
+    (Awni's diagnosis on the linked thread). Default 1 preserves
+    historical behavior; operators of multi-server setups (e.g. an arena
+    fronting 9 vllm-mlx servers) set the env on the spawn command.
+    """
+    num_servers = max(1, int(os.getenv("MLX_LM_NUM_SERVERS", "1")))
+    return int(mx.device_info()["max_recommended_working_set_size"] / num_servers)
+
+
 @contextlib.contextmanager
 def wired_limit(model: nn.Module, streams: Optional[List[mx.Stream]] = None):
     """
@@ -254,7 +270,7 @@ def wired_limit(model: nn.Module, streams: Optional[List[mx.Stream]] = None):
                 "MB. This can be slow. See the documentation for possible work-arounds: "
                 "https://github.com/ml-explore/mlx-lm/tree/main#large-models"
             )
-        old_limit = mx.set_wired_limit(max_rec_size)
+        old_limit = mx.set_wired_limit(_target_wired_limit())
         try:
             yield
         finally:
@@ -1542,9 +1558,7 @@ class BatchGenerator:
         self._steps_counter = 0
 
         if mx.metal.is_available():
-            self._old_wired_limit = mx.set_wired_limit(
-                mx.device_info()["max_recommended_working_set_size"]
-            )
+            self._old_wired_limit = mx.set_wired_limit(_target_wired_limit())
         else:
             self._old_wired_limit = None
 
